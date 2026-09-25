@@ -74,11 +74,9 @@
   dialog textarea { min-height: 160px; resize: vertical; }
   .dialog-ops { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   @media (max-width: 720px) {
-    .layout { flex-direction: column; padding: 12px; }
-    aside { width: 100%; }
-    .cats { display: flex; overflow-x: auto; gap: 4px; }
-    .cat { white-space: nowrap; }
-    .add-cat { width: auto; margin: 0; white-space: nowrap; }
+    .layout { gap: 10px; padding: 12px; }
+    aside { width: 140px; }
+    .cat { padding: 8px 6px; }
   }
 </style>
 </head>
@@ -320,8 +318,7 @@ catsEl.addEventListener('pointermove', e => {
   const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.cat[data-idx]');
   if (!over || over === dragRow || over.parentNode !== catsEl) return;
   const rect = over.getBoundingClientRect();
-  const horizontal = getComputedStyle(catsEl).display === 'flex'; // 手機版分類是橫排
-  const after = horizontal ? e.clientX > rect.left + rect.width / 2 : e.clientY > rect.top + rect.height / 2;
+  const after = e.clientY > rect.top + rect.height / 2;
   catsEl.insertBefore(dragRow, after ? over.nextSibling : over);
 });
 

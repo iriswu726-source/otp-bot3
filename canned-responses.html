@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>客服罐頭訊息</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --text: #1f2328; --muted: #6b7280;
+    --border: #e3e5e8; --accent: #2563eb; --accent-text: #ffffff;
+    --hover: #eef2ff; --danger: #dc2626; --mark: #fde68a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181c; --panel: #1f2227; --text: #e6e8eb; --muted: #9aa1ab;
+      --border: #30343b; --accent: #3b82f6; --accent-text: #ffffff;
+      --hover: #262b36; --danger: #f87171; --mark: #854d0e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-size: 15px; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 18px; margin: 0 12px 0 0; }
+  #search { flex: 1; min-width: 180px; padding: 8px 12px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg); color: var(--text); font-size: 15px; }
+  button { cursor: pointer; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    padding: 7px 12px; border-radius: 8px; font-size: 14px; }
+  button:hover { background: var(--hover); }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button.danger { color: var(--danger); }
+  button.small { padding: 3px 8px; font-size: 12px; }
+  .layout { display: flex; gap: 16px; padding: 16px; max-width: 1200px; margin: 0 auto; }
+  aside { width: 220px; flex-shrink: 0; }
+  main { flex: 1; min-width: 0; }
+  .cats { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px; }
+  .cat { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px;
+    border-radius: 6px; cursor: pointer; gap: 6px; }
+  .cat:hover { background: var(--hover); }
+  .cat.active { background: var(--accent); color: var(--accent-text); }
+  .cat .count { font-size: 12px; opacity: .7; }
+  .cat .ops { display: none; gap: 2px; }
+  .cat:hover .ops { display: flex; }
+  .cat .ops button { padding: 1px 6px; font-size: 12px; background: transparent; color: inherit; border: none; }
+  .add-cat { width: 100%; margin-top: 8px; }
+  .list { display: grid; gap: 10px; }
+  .item { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .item-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .item-title { font-weight: 600; }
+  .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; margin-left: 6px; font-weight: normal; }
+  .item-body { white-space: pre-wrap; margin: 8px 0 10px; line-height: 1.6; cursor: pointer; }
+  .item-body:hover { background: var(--hover); border-radius: 6px; }
+  .item-ops { display: flex; gap: 6px; flex-wrap: wrap; }
+  mark { background: var(--mark); color: inherit; border-radius: 2px; }
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff;
+    padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20; }
+  .toast.show { opacity: .92; }
+  dialog { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--text);
+    width: min(560px, calc(100vw - 32px)); padding: 20px; }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  dialog input, dialog select, dialog textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+  dialog textarea { min-height: 160px; resize: vertical; }
+  .dialog-ops { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  @media (max-width: 720px) {
+    .layout { flex-direction: column; padding: 12px; }
+    aside { width: 100%; }
+    .cats { display: flex; overflow-x: auto; gap: 4px; }
+    .cat { white-space: nowrap; }
+    .add-cat { width: auto; margin: 0; white-space: nowrap; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>客服罐頭訊息</h1>
+  <input id="search" type="search" placeholder="搜尋關鍵字（標題、內容、分類）…">
+  <button class="primary" id="btnAdd">＋ 新增用語</button>
+  <button id="btnExport">匯出</button>
+  <button id="btnImport">匯入</button>
+  <input type="file" id="fileInput" accept=".json,application/json" hidden>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="cats" id="cats"></div>
+  </aside>
+  <main>
+    <div class="list" id="list"></div>
+  </main>
+</div>
+
+<dialog id="itemDialog">
+  <form method="dialog" id="itemForm">
+    <h3 id="itemDialogTitle" style="margin:0">新增用語</h3>
+    <label>標題</label>
+    <input id="fTitle" required placeholder="例如：退貨流程說明">
+    <label>分類</label>
+    <select id="fCat"></select>
+    <label>內容</label>
+    <textarea id="fBody" required placeholder="輸入罐頭訊息內容…"></textarea>
+    <div class="dialog-ops">
+      <button type="button" id="btnCancel">取消</button>
+      <button type="submit" class="primary">儲存</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORE_KEY = 'canned-responses-v1';
+const ALL = '__all__';
+const UNCAT = '未分類';
+
+let state = load();
+let currentCat = ALL;
+let editingId = null;
+
+function defaultData() {
+  return {
+    categories: ['問候', '訂單', '退換貨', '結尾'],
+    items: [
+      { id: uid(), title: '開場問候', category: '問候', body: '您好，很高興為您服務，請問有什麼可以幫您的呢？' },
+      { id: uid(), title: '查詢訂單', category: '訂單', body: '麻煩您提供訂單編號，我這邊立即為您查詢，謝謝！' },
+      { id: uid(), title: '退貨流程', category: '退換貨', body: '您好，商品到貨 7 天內可申請退貨，請至「我的訂單」點選申請退貨，並保持商品完整包裝。' },
+      { id: uid(), title: '結束對話', category: '結尾', body: '感謝您的耐心等候，若還有其他問題歡迎隨時詢問，祝您有美好的一天！' },
+    ],
+  };
+}
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) return normalize(JSON.parse(raw));
+  } catch (e) {}
+  return defaultData();
+}
+
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+// 確保資料格式正確，並補上缺少的分類
+function normalize(data) {
+  const categories = Array.isArray(data.categories) ? data.categories.map(String) : [];
+  const items = (Array.isArray(data.items) ? data.items : [])
+    .filter(i => i && (i.title || i.body))
+    .map(i => ({
+      id: i.id || uid(),
+      title: String(i.title || ''),
+      category: String(i.category || UNCAT),
+      body: String(i.body || ''),
+    }));
+  items.forEach(i => { if (!categories.includes(i.category)) categories.push(i.category); });
+  return { categories, items };
+}
+
+function esc(s) {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function highlight(text, keywords) {
+  let html = esc(text);
+  if (!keywords.length) return html;
+  const pattern = keywords.map(k => esc(k).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  return html.replace(new RegExp(`(${pattern})`, 'gi'), '<mark>$1</mark>');
+}
+
+function getKeywords() {
+  return document.getElementById('search').value.trim().split(/\s+/).filter(Boolean);
+}
+
+function render() {
+  renderCats();
+  renderList();
+}
+
+function renderCats() {
+  const el = document.getElementById('cats');
+  const count = c => state.items.filter(i => i.category === c).length;
+  let html = `<div class="cat ${currentCat === ALL ? 'active' : ''}" data-cat="${ALL}">
+    <span>全部</span><span class="count">${state.items.length}</span></div>`;
+  state.categories.forEach((c, idx) => {
+    html += `<div class="cat ${currentCat === c ? 'active' : ''}" data-cat="${esc(c)}">
+      <span>${esc(c)}</span>
+      <span style="display:flex;align-items:center;gap:4px">
+        <span class="ops">
+          <button data-act="up" data-idx="${idx}" title="上移">↑</button>
+          <button data-act="rename" data-idx="${idx}" title="重新命名">✎</button>
+          <button data-act="del" data-idx="${idx}" title="刪除">✕</button>
+        </span>
+        <span class="count">${count(c)}</span>
+      </span></div>`;
+  });
+  html += `<button class="add-cat" id="btnAddCat">＋ 新增分類</button>`;
+  el.innerHTML = html;
+}
+
+function renderList() {
+  const el = document.getElementById('list');
+  const kws = getKeywords();
+  const lower = kws.map(k => k.toLowerCase());
+  const items = state.items.filter(i => {
+    if (currentCat !== ALL && i.category !== currentCat) return false;
+    const hay = (i.title + '\n' + i.body + '\n' + i.category).toLowerCase();
+    return lower.every(k => hay.includes(k));
+  });
+  if (!items.length) {
+    el.innerHTML = `<div class="empty">${kws.length ? '找不到符合的用語' : '這個分類還沒有用語，點「新增用語」開始建立'}</div>`;
+    return;
+  }
+  el.innerHTML = items.map(i => `
+    <div class="item" data-id="${i.id}">
+      <div class="item-head">
+        <div class="item-title">${highlight(i.title, kws)}<span class="tag">${highlight(i.category, kws)}</span></div>
+      </div>
+      <div class="item-body" data-act="copy" title="點擊複製">${highlight(i.body, kws)}</div>
+      <div class="item-ops">
+        <button class="small primary" data-act="copy">複製</button>
+        <button class="small" data-act="edit">編輯</button>
+        <button class="small danger" data-act="delete">刪除</button>
+      </div>
+    </div>`).join('');
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+  toast('已複製到剪貼簿');
+}
+
+// ---------- 分類 ----------
+document.getElementById('cats').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (btn && btn.id === 'btnAddCat') {
+    const name = (prompt('新分類名稱：') || '').trim();
+    if (!name) return;
+    if (state.categories.includes(name)) return toast('分類已存在');
+    state.categories.push(name);
+    save(); render();
+    return;
+  }
+  if (btn && btn.dataset.act) {
+    e.stopPropagation();
+    const idx = +btn.dataset.idx;
+    const old = state.categories[idx];
+    if (btn.dataset.act === 'up' && idx > 0) {
+      [state.categories[idx - 1], state.categories[idx]] = [state.categories[idx], state.categories[idx - 1]];
+    } else if (btn.dataset.act === 'rename') {
+      const name = (prompt('重新命名分類：', old) || '').trim();
+      if (!name || name === old) return;
+      if (state.categories.includes(name)) return toast('分類已存在');
+      state.categories[idx] = name;
+      state.items.forEach(i => { if (i.category === old) i.category = name; });
+      if (currentCat === old) currentCat = name;
+    } else if (btn.dataset.act === 'del') {
+      const n = state.items.filter(i => i.category === old).length;
+      if (!confirm(n ? `分類「${old}」內有 ${n} 則用語，刪除後將移到「${UNCAT}」，確定嗎？` : `確定刪除分類「${old}」？`)) return;
+      state.categories.splice(idx, 1);
+      if (n) {
+        state.items.forEach(i => { if (i.category === old) i.category = UNCAT; });
+        if (!state.categories.includes(UNCAT)) state.categories.push(UNCAT);
+      }
+      if (currentCat === old) currentCat = ALL;
+    }
+    save(); render();
+    return;
+  }
+  const cat = e.target.closest('.cat');
+  if (cat) { currentCat = cat.dataset.cat; render(); }
+});
+
+// ---------- 用語 ----------
+const dialog = document.getElementById('itemDialog');
+
+function openItemDialog(item) {
+  editingId = item ? item.id : null;
+  document.getElementById('itemDialogTitle').textContent = item ? '編輯用語' : '新增用語';
+  const sel = document.getElementById('fCat');
+  const cats = state.categories.length ? state.categories : [UNCAT];
+  sel.innerHTML = cats.map(c => `<option>${esc(c)}</option>`).join('');
+  sel.value = item ? item.category : (currentCat !== ALL ? currentCat : cats[0]);
+  document.getElementById('fTitle').value = item ? item.title : '';
+  document.getElementById('fBody').value = item ? item.body : '';
+  dialog.showModal();
+  document.getElementById('fTitle').focus();
+}
+
+document.getElementById('btnAdd').onclick = () => openItemDialog(null);
+document.getElementById('btnCancel').onclick = () => dialog.close();
+
+document.getElementById('itemForm').addEventListener('submit', () => {
+  const data = {
+    title: document.getElementById('fTitle').value.trim(),
+    category: document.getElementById('fCat').value,
+    body: document.getElementById('fBody').value,
+  };
+  if (!state.categories.includes(data.category)) state.categories.push(data.category);
+  if (editingId) {
+    Object.assign(state.items.find(i => i.id === editingId), data);
+  } else {
+    state.items.unshift({ id: uid(), ...data });
+  }
+  save(); render();
+  toast('已儲存');
+});
+
+document.getElementById('list').addEventListener('click', e => {
+  const actEl = e.target.closest('[data-act]');
+  if (!actEl) return;
+  const item = state.items.find(i => i.id === e.target.closest('.item').dataset.id);
+  if (!item) return;
+  const act = actEl.dataset.act;
+  if (act === 'copy') copyText(item.body);
+  else if (act === 'edit') openItemDialog(item);
+  else if (act === 'delete' && confirm(`確定刪除「${item.title}」？`)) {
+    state.items = state.items.filter(i => i !== item);
+    save(); render();
+  }
+});
+
+// ---------- 搜尋 ----------
+document.getElementById('search').addEventListener('input', renderList);
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); document.getElementById('search').focus(); }
+  if (e.key === 'Escape' && document.activeElement.id === 'search') { e.target.value = ''; renderList(); }
+});
+
+// ---------- 匯出 / 匯入 ----------
+document.getElementById('btnExport').onclick = () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  const d = new Date();
+  const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  a.href = URL.createObjectURL(blob);
+  a.download = `canned-responses-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('已匯出');
+};
+
+const fileInput = document.getElementById('fileInput');
+document.getElementById('btnImport').onclick = () => fileInput.click();
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  fileInput.value = '';
+  if (!file) return;
+  let incoming;
+  try {
+    incoming = normalize(JSON.parse(await file.text()));
+  } catch (e) {
+    return alert('檔案格式錯誤，請選擇由本工具匯出的 JSON 檔。');
+  }
+  const replace = confirm(
+    `讀取到 ${incoming.categories.length} 個分類、${incoming.items.length} 則用語。\n\n` +
+    `按「確定」＝覆蓋目前全部資料\n按「取消」＝合併（略過標題與內容完全相同的項目）`);
+  if (replace) {
+    state = incoming;
+  } else {
+    incoming.categories.forEach(c => { if (!state.categories.includes(c)) state.categories.push(c); });
+    const seen = new Set(state.items.map(i => i.title + '\u0000' + i.body));
+    let added = 0;
+    incoming.items.forEach(i => {
+      if (seen.has(i.title + '\u0000' + i.body)) return;
+      state.items.push({ ...i, id: uid() });
+      added++;
+    });
+    toast(`已合併 ${added} 則新用語`);
+  }
+  currentCat = ALL;
+  save(); render();
+  if (replace) toast('已匯入並覆蓋');
+});
+
+render();
+</script>
+</body>
+</html>

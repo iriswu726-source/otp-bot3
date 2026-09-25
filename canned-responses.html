@@ -43,6 +43,14 @@
   .cat .ops { display: none; gap: 2px; }
   .cat:hover .ops { display: flex; }
   .cat .ops button { padding: 1px 6px; font-size: 12px; background: transparent; color: inherit; border: none; }
+  .cat .name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .handle { cursor: grab; opacity: .45; touch-action: none; user-select: none; padding: 0 2px; letter-spacing: -2px; }
+  .handle:hover { opacity: .9; }
+  .cat.dragging { opacity: .6; outline: 2px dashed var(--accent); outline-offset: -2px; }
+  body.is-dragging, body.is-dragging * { cursor: grabbing !important; user-select: none; }
+  .batch-row { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 14px; }
+  .batch-row input { width: auto; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
   .add-cat { width: 100%; margin-top: 8px; }
   .list { display: grid; gap: 10px; }
   .item { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
@@ -96,12 +104,16 @@
 <dialog id="itemDialog">
   <form method="dialog" id="itemForm">
     <h3 id="itemDialogTitle" style="margin:0">新增用語</h3>
-    <label>標題</label>
-    <input id="fTitle" required placeholder="例如：退貨流程說明">
+    <label id="lTitle">標題（可留空，會自動用內容開頭當標題）</label>
+    <input id="fTitle" placeholder="例如：退貨流程說明">
     <label>分類</label>
     <select id="fCat"></select>
     <label>內容</label>
     <textarea id="fBody" required placeholder="輸入罐頭訊息內容…"></textarea>
+    <div id="batchBox">
+      <label class="batch-row" style="color:var(--text)"><input type="checkbox" id="fBatch"> 批次新增：每一行拆成一則用語</label>
+      <div class="hint" id="batchHint"></div>
+    </div>
     <div class="dialog-ops">
       <button type="button" id="btnCancel">取消</button>
       <button type="submit" class="primary">儲存</button>
@@ -187,11 +199,10 @@ function renderCats() {
   let html = `<div class="cat ${currentCat === ALL ? 'active' : ''}" data-cat="${ALL}">
     <span>全部</span><span class="count">${state.items.length}</span></div>`;
   state.categories.forEach((c, idx) => {
-    html += `<div class="cat ${currentCat === c ? 'active' : ''}" data-cat="${esc(c)}">
-      <span>${esc(c)}</span>
+    html += `<div class="cat ${currentCat === c ? 'active' : ''}" data-cat="${esc(c)}" data-idx="${idx}">
+      <span class="name"><span class="handle" title="拖曳排序">⋮⋮</span><span>${esc(c)}</span></span>
       <span style="display:flex;align-items:center;gap:4px">
         <span class="ops">
-          <button data-act="up" data-idx="${idx}" title="上移">↑</button>
           <button data-act="rename" data-idx="${idx}" title="重新命名">✎</button>
           <button data-act="del" data-idx="${idx}" title="刪除">✕</button>
         </span>
@@ -266,9 +277,7 @@ document.getElementById('cats').addEventListener('click', e => {
     e.stopPropagation();
     const idx = +btn.dataset.idx;
     const old = state.categories[idx];
-    if (btn.dataset.act === 'up' && idx > 0) {
-      [state.categories[idx - 1], state.categories[idx]] = [state.categories[idx], state.categories[idx - 1]];
-    } else if (btn.dataset.act === 'rename') {
+    if (btn.dataset.act === 'rename') {
       const name = (prompt('重新命名分類：', old) || '').trim();
       if (!name || name === old) return;
       if (state.categories.includes(name)) return toast('分類已存在');
@@ -292,8 +301,76 @@ document.getElementById('cats').addEventListener('click', e => {
   if (cat) { currentCat = cat.dataset.cat; render(); }
 });
 
+// 拖曳排序分類（用 pointer 事件，滑鼠與手機觸控都可用）
+const catsEl = document.getElementById('cats');
+let dragRow = null;
+
+catsEl.addEventListener('pointerdown', e => {
+  const handle = e.target.closest('.handle');
+  if (!handle) return;
+  e.preventDefault();
+  dragRow = handle.closest('.cat');
+  dragRow.classList.add('dragging');
+  document.body.classList.add('is-dragging');
+  handle.setPointerCapture(e.pointerId);
+});
+
+catsEl.addEventListener('pointermove', e => {
+  if (!dragRow) return;
+  const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.cat[data-idx]');
+  if (!over || over === dragRow || over.parentNode !== catsEl) return;
+  const rect = over.getBoundingClientRect();
+  const horizontal = getComputedStyle(catsEl).display === 'flex'; // 手機版分類是橫排
+  const after = horizontal ? e.clientX > rect.left + rect.width / 2 : e.clientY > rect.top + rect.height / 2;
+  catsEl.insertBefore(dragRow, after ? over.nextSibling : over);
+});
+
+function endDrag() {
+  if (!dragRow) return;
+  const old = state.categories.slice();
+  state.categories = [...catsEl.querySelectorAll('.cat[data-idx]')].map(r => old[+r.dataset.idx]);
+  dragRow = null;
+  document.body.classList.remove('is-dragging');
+  save(); render();
+}
+catsEl.addEventListener('pointerup', endDrag);
+catsEl.addEventListener('pointercancel', endDrag);
+catsEl.addEventListener('click', e => { if (e.target.closest('.handle')) e.stopPropagation(); }, true);
+
 // ---------- 用語 ----------
 const dialog = document.getElementById('itemDialog');
+const BATCH_KEY = 'canned-responses-batch';
+
+function autoTitle(body) {
+  const first = body.trim().split('\n')[0];
+  return first.length > 20 ? first.slice(0, 20) + '…' : first;
+}
+
+// 批次模式：每行一則；若該行含 Tab（從 Google 試算表貼上兩欄），第一欄當標題、第二欄當內容
+function parseBatch(text) {
+  return text.split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(line => {
+    const cols = line.split('\t').map(c => c.trim());
+    if (cols.length >= 2 && cols[1]) return { title: cols[0] || autoTitle(cols.slice(1).join(' ')), body: cols.slice(1).join(' ') };
+    return { title: autoTitle(line), body: line };
+  });
+}
+
+function isBatch() { return !editingId && document.getElementById('fBatch').checked; }
+
+function updateBatchUI() {
+  const batch = isBatch();
+  document.getElementById('fTitle').disabled = batch;
+  document.getElementById('lTitle').textContent = batch ? '標題（批次模式會自動用每行開頭當標題）' : '標題（可留空，會自動用內容開頭當標題）';
+  const n = parseBatch(document.getElementById('fBody').value).length;
+  document.getElementById('batchHint').innerHTML = batch
+    ? `將新增 <b>${n}</b> 則用語。可直接從 Google 文件貼上多行；從 Google 試算表貼上兩欄時，第一欄當標題、第二欄當內容。`
+    : '關閉時，整段內容（含換行）會存成同一則用語。';
+}
+document.getElementById('fBatch').addEventListener('change', () => {
+  try { localStorage.setItem(BATCH_KEY, document.getElementById('fBatch').checked ? '1' : '0'); } catch (e) {}
+  updateBatchUI();
+});
+document.getElementById('fBody').addEventListener('input', updateBatchUI);
 
 function openItemDialog(item) {
   editingId = item ? item.id : null;
@@ -304,20 +381,30 @@ function openItemDialog(item) {
   sel.value = item ? item.category : (currentCat !== ALL ? currentCat : cats[0]);
   document.getElementById('fTitle').value = item ? item.title : '';
   document.getElementById('fBody').value = item ? item.body : '';
+  document.getElementById('batchBox').hidden = !!item;
+  let batch = true;
+  try { batch = localStorage.getItem(BATCH_KEY) !== '0'; } catch (e) {}
+  document.getElementById('fBatch').checked = batch;
+  updateBatchUI();
   dialog.showModal();
-  document.getElementById('fTitle').focus();
+  document.getElementById(isBatch() ? 'fBody' : 'fTitle').focus();
 }
 
 document.getElementById('btnAdd').onclick = () => openItemDialog(null);
 document.getElementById('btnCancel').onclick = () => dialog.close();
 
 document.getElementById('itemForm').addEventListener('submit', () => {
-  const data = {
-    title: document.getElementById('fTitle').value.trim(),
-    category: document.getElementById('fCat').value,
-    body: document.getElementById('fBody').value,
-  };
-  if (!state.categories.includes(data.category)) state.categories.push(data.category);
+  const category = document.getElementById('fCat').value;
+  const body = document.getElementById('fBody').value;
+  if (!state.categories.includes(category)) state.categories.push(category);
+  if (isBatch()) {
+    const rows = parseBatch(body);
+    state.items.unshift(...rows.map(r => ({ id: uid(), category, ...r })));
+    save(); render();
+    toast(`已新增 ${rows.length} 則用語`);
+    return;
+  }
+  const data = { title: document.getElementById('fTitle').value.trim() || autoTitle(body), category, body };
   if (editingId) {
     Object.assign(state.items.find(i => i.id === editingId), data);
   } else {
